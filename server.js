@@ -130,6 +130,14 @@ app.get('/api/init', (req, res) => res.json(getInitData()));
 
 app.get('/api/messages/:convId', (req, res) => res.json(getMessages(req.params.convId)));
 
+app.post('/api/avatar', (req, res) => {
+  const { userId, avatar } = req.body;
+  if (!userId || !avatar) return res.status(400).json({ error: 'Missing fields' });
+  db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, userId);
+  io.emit('avatarUpdate', { userId, avatar });
+  res.json({ ok: true });
+});
+
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const isImage = req.file.mimetype.startsWith('image/');

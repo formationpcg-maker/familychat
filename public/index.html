@@ -270,6 +270,20 @@
     #chat { width: 100%; }
   }
   #back-btn { display: none; background: none; border: none; color: var(--text); cursor: pointer; font-size: 1.4rem; }
+
+  /* Avatar picker */
+  #my-avatar { cursor: pointer; transition: transform .15s; }
+  #my-avatar:hover { transform: scale(1.2); }
+  #avatar-picker {
+    position: absolute; top: 60px; left: 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px;
+    display: none; flex-wrap: wrap; gap: 4px; width: 230px; z-index: 50;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  #avatar-picker.open { display: flex; }
+  .ap-emoji { font-size: 1.5rem; cursor: pointer; padding: 5px; border-radius: 6px; transition: background .1s; }
+  .ap-emoji:hover { background: var(--surface); }
 </style>
 </head>
 <body>
@@ -287,10 +301,11 @@
   <!-- Sidebar -->
   <div id="sidebar">
     <div id="sidebar-header">
-      <span id="my-avatar"></span>
+      <span id="my-avatar" title="Changer d'avatar"></span>
       <span id="my-name"></span>
       <button id="notif-btn" title="Notifications">🔔</button>
     </div>
+    <div id="avatar-picker"></div>
     <div id="sidebar-search"><input type="text" id="search-input" placeholder="Rechercher…"/></div>
     <div id="conv-list"></div>
   </div>
@@ -401,6 +416,14 @@ socket.on('onlineList', (ids) => { onlineUsers = new Set(ids); updateOnlineDots(
 socket.on('presence', ({ userId, online }) => {
   if (online) onlineUsers.add(userId); else onlineUsers.delete(userId);
   updateOnlineDots();
+  if (currentConv) updateChatHeader();
+});
+
+socket.on('avatarUpdate', ({ userId, avatar }) => {
+  const u = users.find(u => u.id === userId);
+  if (u) u.avatar = avatar;
+  if (currentUser?.id === userId) document.getElementById('my-avatar').textContent = avatar;
+  renderConvList();
   if (currentConv) updateChatHeader();
 });
 
@@ -788,6 +811,44 @@ function fmtTime(ts) {
   const d = new Date(ts);
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
+
+// ── Avatar picker ──────────────────────────────────────────────────────────────
+const AVATAR_EMOJIS = [
+  '👨','👩','🧒','👧','👦','👴','👵','🧑','👱','🧔',
+  '😀','😎','🥳','🤩','😇','🦊','🐱','🐶','🐼','🐨',
+  '🦁','🐯','🐸','🐙','🦋','🌟','🔥','⚡','🎸','🎮',
+  '🚀','🌈','🍕','🎯','💎','👑','🎩','🦄','🐲','🤖',
+];
+
+const avatarBtn = document.getElementById('my-avatar');
+const avatarPicker = document.getElementById('avatar-picker');
+
+AVATAR_EMOJIS.forEach(em => {
+  const btn = document.createElement('span');
+  btn.className = 'ap-emoji';
+  btn.textContent = em;
+  btn.onclick = async () => {
+    avatarPicker.classList.remove('open');
+    await fetch('/api/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUser.id, avatar: em }),
+    });
+    currentUser.avatar = em;
+    avatarBtn.textContent = em;
+    // update local users list and re-render conv list
+    const u = users.find(u => u.id === currentUser.id);
+    if (u) u.avatar = em;
+    renderConvList();
+  };
+  avatarPicker.appendChild(btn);
+});
+
+avatarBtn.onclick = (e) => {
+  e.stopPropagation();
+  avatarPicker.classList.toggle('open');
+};
+document.addEventListener('click', () => avatarPicker.classList.remove('open'));
 
 // ── Mobile back button ─────────────────────────────────────────────────────────
 document.getElementById('back-btn').onclick = () => {
