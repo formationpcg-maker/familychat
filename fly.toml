@@ -8,6 +8,9 @@ primary_region = 'ams'
 
 [build]
 
+[env]
+  DATA_DIR = '/data'
+
 [processes]
   app = 'node server.js'
 
