@@ -271,6 +271,39 @@
   }
   #back-btn { display: none; background: none; border: none; color: var(--text); cursor: pointer; font-size: 1.4rem; }
 
+  /* Call button */
+  #call-btn { background: none; border: none; cursor: pointer; font-size: 1.3rem; color: var(--accent2); padding: 6px; margin-left: auto; display: none; }
+  #call-btn:hover { transform: scale(1.15); }
+
+  /* Incoming call overlay */
+  #incoming-call {
+    position: fixed; inset: 0; background: rgba(0,0,0,.75);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; z-index: 500;
+  }
+  #incoming-call.open { display: flex; }
+  #incoming-call .ic-avatar { font-size: 4rem; animation: pulse 1s infinite; }
+  #incoming-call .ic-name { font-size: 1.4rem; font-weight: 700; }
+  #incoming-call .ic-label { color: var(--text2); font-size: .95rem; }
+  #incoming-call .ic-btns { display: flex; gap: 32px; margin-top: 10px; }
+  .ic-btn { width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.6rem; }
+  .ic-accept { background: var(--accent2); }
+  .ic-reject { background: var(--red); }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+
+  /* Active call bar */
+  #active-call {
+    display: none; align-items: center; gap: 12px;
+    padding: 10px 20px; background: #1a3a1a; border-bottom: 1px solid var(--accent2);
+  }
+  #active-call.open { display: flex; }
+  #call-timer { font-size: .9rem; color: var(--accent2); font-weight: 700; flex: 1; }
+  #call-peer { font-size: .9rem; color: var(--text2); }
+  #mute-btn, #hangup-btn { background: none; border: none; cursor: pointer; font-size: 1.3rem; padding: 4px 8px; border-radius: 8px; }
+  #mute-btn { color: var(--text); }
+  #mute-btn.muted { color: var(--red); }
+  #hangup-btn { background: var(--red); color: #fff; font-size: 1rem; padding: 6px 14px; border-radius: 20px; }
+
   /* Avatar picker */
   #my-avatar { cursor: pointer; transition: transform .15s; }
   #my-avatar:hover { transform: scale(1.2); }
@@ -326,6 +359,14 @@
           <div id="chat-subtitle"></div>
         </div>
         <div id="chat-members"></div>
+        <button id="call-btn" title="Appel audio">📞</button>
+      </div>
+      <div id="active-call">
+        <span>📞</span>
+        <span id="call-peer"></span>
+        <span id="call-timer">00:00</span>
+        <button id="mute-btn" title="Muet">🎤</button>
+        <button id="hangup-btn">Raccrocher</button>
       </div>
       <div id="messages"></div>
       <div id="typing-bar"></div>
@@ -353,6 +394,20 @@
   <div class="ctx-emojis" id="ctx-emojis"></div>
   <div class="ctx-item" id="ctx-copy">📋 Copier</div>
 </div>
+
+<!-- Incoming call -->
+<div id="incoming-call">
+  <div class="ic-avatar" id="ic-avatar"></div>
+  <div class="ic-name" id="ic-name"></div>
+  <div class="ic-label">Appel audio entrant…</div>
+  <div class="ic-btns">
+    <button class="ic-btn ic-reject" onclick="rejectCall()">📵</button>
+    <button class="ic-btn ic-accept" onclick="acceptCall()">📞</button>
+  </div>
+</div>
+
+<!-- Audio element -->
+<audio id="remote-audio" autoplay></audio>
 
 <!-- Lightbox -->
 <div id="lightbox" onclick="closeLightbox()">
@@ -535,6 +590,7 @@ function updateChatHeader() {
     document.getElementById('chat-subtitle').textContent =
       onlineUsers.has(other?.id) ? '🟢 En ligne' : 'Hors ligne';
   }
+  document.getElementById('call-btn').style.display = currentConv?.type === 'dm' ? 'inline-block' : 'none';
 }
 
 // ── Render messages ──────────────────────────────────────────────────────────
@@ -855,6 +911,122 @@ document.getElementById('back-btn').onclick = () => {
   document.getElementById('sidebar').classList.add('mobile-open');
   currentConv = null;
 };
+
+// ── WebRTC Audio Calls ─────────────────────────────────────────────────────────
+const STUN = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+let pc = null;
+let localStream = null;
+let callTarget = null;
+let incomingOffer = null;
+let callTimerInterval = null;
+let callSeconds = 0;
+let isMuted = false;
+
+function getCallTarget() {
+  if (!currentConv) return null;
+  if (currentConv.type === 'dm') return currentConv.members.find(id => id !== me.id);
+  return null;
+}
+
+async function startCall() {
+  callTarget = getCallTarget();
+  if (!callTarget) return;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e) {
+    alert('Impossible d\'accéder au micro : ' + e.message); return;
+  }
+  pc = new RTCPeerConnection(STUN);
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.onicecandidate = e => { if (e.candidate) socket.emit('call-ice', { toUserId: callTarget, candidate: e.candidate }); };
+  pc.ontrack = e => { document.getElementById('remote-audio').srcObject = e.streams[0]; };
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit('call-offer', { toUserId: callTarget, fromUserId: me.id, offer });
+  showActiveCall();
+}
+
+async function acceptCall() {
+  document.getElementById('incoming-call').classList.remove('open');
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e) {
+    alert('Impossible d\'accéder au micro : ' + e.message); return;
+  }
+  pc = new RTCPeerConnection(STUN);
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.onicecandidate = e => { if (e.candidate) socket.emit('call-ice', { toUserId: callTarget, candidate: e.candidate }); };
+  pc.ontrack = e => { document.getElementById('remote-audio').srcObject = e.streams[0]; };
+  await pc.setRemoteDescription(incomingOffer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit('call-answer', { toUserId: callTarget, answer });
+  showActiveCall();
+}
+
+function rejectCall() {
+  socket.emit('call-reject', { toUserId: callTarget });
+  callTarget = null;
+  incomingOffer = null;
+  document.getElementById('incoming-call').classList.remove('open');
+}
+
+function hangUp(notify = true) {
+  if (notify && callTarget) socket.emit('call-end', { toUserId: callTarget });
+  if (pc) { pc.close(); pc = null; }
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  callTarget = null;
+  incomingOffer = null;
+  isMuted = false;
+  clearInterval(callTimerInterval);
+  document.getElementById('active-call').classList.remove('open');
+  document.getElementById('incoming-call').classList.remove('open');
+  document.getElementById('remote-audio').srcObject = null;
+}
+
+function showActiveCall() {
+  const peer = db.users.find(u => u.id === callTarget);
+  document.getElementById('call-peer').textContent = peer ? peer.name : '';
+  callSeconds = 0;
+  document.getElementById('call-timer').textContent = '00:00';
+  clearInterval(callTimerInterval);
+  callTimerInterval = setInterval(() => {
+    callSeconds++;
+    const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+    const s = String(callSeconds % 60).padStart(2, '0');
+    document.getElementById('call-timer').textContent = m + ':' + s;
+  }, 1000);
+  document.getElementById('active-call').classList.add('open');
+}
+
+document.getElementById('call-btn').onclick = startCall;
+document.getElementById('hangup-btn').onclick = () => hangUp(true);
+document.getElementById('mute-btn').onclick = () => {
+  isMuted = !isMuted;
+  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  document.getElementById('mute-btn').classList.toggle('muted', isMuted);
+  document.getElementById('mute-btn').textContent = isMuted ? '🔇' : '🎤';
+};
+
+socket.on('call-offer', ({ fromUserId, offer }) => {
+  callTarget = fromUserId;
+  incomingOffer = offer;
+  const caller = db.users.find(u => u.id === fromUserId);
+  document.getElementById('ic-avatar').textContent = caller?.avatar || '👤';
+  document.getElementById('ic-name').textContent = caller?.name || '';
+  document.getElementById('incoming-call').classList.add('open');
+});
+
+socket.on('call-answer', async ({ answer }) => {
+  if (pc) await pc.setRemoteDescription(answer);
+});
+
+socket.on('call-ice', async ({ candidate }) => {
+  if (pc) await pc.addIceCandidate(candidate);
+});
+
+socket.on('call-end', () => hangUp(false));
+socket.on('call-reject', () => { hangUp(false); alert('Appel refusé.'); });
 
 // ── Mobile: show sidebar on load ───────────────────────────────────────────────
 if (window.innerWidth <= 640) {

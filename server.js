@@ -207,6 +207,18 @@ io.on('connection', (socket) => {
     io.to(convId).emit('read', { convId, userId });
   });
 
+  function toUser(userId, event, data) {
+    for (const [sid, uid] of onlineUsers) {
+      if (uid === userId) io.to(sid).emit(event, data);
+    }
+  }
+
+  socket.on('call-offer',  ({ toUserId, fromUserId, offer })  => toUser(toUserId, 'call-offer',  { fromUserId, offer }));
+  socket.on('call-answer', ({ toUserId, answer })              => toUser(toUserId, 'call-answer', { answer }));
+  socket.on('call-ice',    ({ toUserId, candidate })           => toUser(toUserId, 'call-ice',    { candidate }));
+  socket.on('call-end',    ({ toUserId })                      => toUser(toUserId, 'call-end',    {}));
+  socket.on('call-reject', ({ toUserId })                      => toUser(toUserId, 'call-reject', {}));
+
   socket.on('disconnect', () => {
     const userId = onlineUsers.get(socket.id);
     onlineUsers.delete(socket.id);
