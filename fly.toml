@@ -9,7 +9,7 @@ primary_region = 'ams'
 [build]
 
 [processes]
-  app = 'node ./dbsetup.js node server.js'
+  app = 'node server.js'
 
 [[mounts]]
   source = 'data'
