@@ -795,6 +795,11 @@ document.getElementById('back-btn').onclick = () => {
   currentConv = null;
 };
 
+// ── Mobile: show sidebar on load ───────────────────────────────────────────────
+if (window.innerWidth <= 640) {
+  document.getElementById('sidebar').classList.add('mobile-open');
+}
+
 // ── Start ──────────────────────────────────────────────────────────────────────
 initApp();
 </script>
