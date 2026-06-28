@@ -13,7 +13,7 @@ const io = new Server(server, { maxHttpBufferSize: 20e6 });
 
 // ── SQLite setup ─────────────────────────────────────────────────────────────
 const DATA_DIR = process.env.DATA_DIR || __dirname;
-const DB_PATH = path.join(DATA_DIR, 'chatounet.db');
+const DB_PATH = path.join(DATA_DIR, 'familychat.db');
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -60,12 +60,19 @@ if (userCount === 0) {
   const insertMember = db.prepare('INSERT INTO conversation_members (conv_id, user_id) VALUES (?, ?)');
 
   const seedUsers = [
-    { id: 'u1', name: 'Mat', avatar: '🧔', color: '#4A90D9' },
-    { id: 'u2', name: 'Deb', avatar: '👩', color: '#E57373' },
+    { id: 'u1', name: 'Papa',    avatar: '👨', color: '#4A90D9' },
+    { id: 'u2', name: 'Maman',   avatar: '👩', color: '#E57373' },
+    { id: 'u3', name: 'William', avatar: '🧒', color: '#66BB6A' },
+    { id: 'u4', name: 'Naïssa',  avatar: '👧', color: '#FFA726' },
   ];
   const seedConvs = [
-    { id: 'group', name: 'Chatounet 💬', type: 'group', members: ['u1','u2'] },
+    { id: 'group', name: 'Famille 🏠', type: 'group', members: ['u1','u2','u3','u4'] },
     { id: 'u1-u2', name: null, type: 'dm', members: ['u1','u2'] },
+    { id: 'u1-u3', name: null, type: 'dm', members: ['u1','u3'] },
+    { id: 'u1-u4', name: null, type: 'dm', members: ['u1','u4'] },
+    { id: 'u2-u3', name: null, type: 'dm', members: ['u2','u3'] },
+    { id: 'u2-u4', name: null, type: 'dm', members: ['u2','u4'] },
+    { id: 'u3-u4', name: null, type: 'dm', members: ['u3','u4'] },
   ];
 
   const seedTx = db.transaction(() => {
@@ -227,4 +234,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Chatounet running on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`FamilyChat running on http://localhost:${PORT}`));
