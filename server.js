@@ -52,6 +52,10 @@ db.exec(`
   );
 `);
 
+// Apply name corrections
+db.prepare("UPDATE users SET name = 'William' WHERE id = 'u3' AND name = 'Enfant 1'").run();
+db.prepare("UPDATE users SET name = 'Naïssa'  WHERE id = 'u4' AND name = 'Enfant 2'").run();
+
 // Seed initial data if empty
 const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
 if (userCount === 0) {
@@ -62,8 +66,8 @@ if (userCount === 0) {
   const seedUsers = [
     { id: 'u1', name: 'Papa',     avatar: '👨', color: '#4A90D9' },
     { id: 'u2', name: 'Maman',    avatar: '👩', color: '#E57373' },
-    { id: 'u3', name: 'Enfant 1', avatar: '🧒', color: '#66BB6A' },
-    { id: 'u4', name: 'Enfant 2', avatar: '👧', color: '#FFA726' },
+    { id: 'u3', name: 'William', avatar: '🧒', color: '#66BB6A' },
+    { id: 'u4', name: 'Naïssa',  avatar: '👧', color: '#FFA726' },
   ];
   const seedConvs = [
     { id: 'group', name: 'Famille 🏠', type: 'group', members: ['u1','u2','u3','u4'] },
